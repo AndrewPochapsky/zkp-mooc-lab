@@ -148,7 +148,21 @@ template CheckBitLength(b) {
     signal input in;
     signal output out;
 
-    // TODO
+    signal bits[b];
+    for (var i = 0; i < b; i++) {
+        bits[i] <-- (in >> i) & 1;
+        bits[i] * (1 - bits[i]) === 0;
+    }
+    var sum_of_bits = 0;
+    for (var i = 0; i < b; i++) {
+        sum_of_bits += (2 ** i) * bits[i];
+    }
+
+    component is_equal = IsEqual();
+    is_equal.in[0] <== sum_of_bits;
+    is_equal.in[1] <== in;
+
+    out <== is_equal.out;
 }
 
 /*
@@ -197,7 +211,23 @@ template RightShift(b, shift) {
     signal input x;
     signal output y;
 
-    // TODO
+    component original_bits = Num2Bits(b);
+    original_bits.in <== x;
+
+    signal shifted_bits[b];
+    for (var i = 0; i < b; i++) {
+        if (i + shift < b) {
+            shifted_bits[i] <== original_bits.bits[i + shift];
+        } else {
+            shifted_bits[i] <== 0;
+        }
+    }
+
+    component shifted_bits_to_num = Bits2Num(b);
+    shifted_bits_to_num.bits <== shifted_bits;
+
+    y <== shifted_bits_to_num.out;
+
 }
 
 /*
