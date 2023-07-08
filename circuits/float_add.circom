@@ -227,7 +227,6 @@ template RightShift(b, shift) {
     shifted_bits_to_num.bits <== shifted_bits;
 
     y <== shifted_bits_to_num.out;
-
 }
 
 /*
@@ -289,7 +288,18 @@ template LeftShift(shift_bound) {
     signal input skip_checks;
     signal output y;
 
-    // TODO
+    // Not sure how to enforce this is correct...
+    y <-- x << shift;
+
+    component lt = LessThan(shift_bound);
+    lt.in[0] <== shift;
+    lt.in[1] <== shift_bound;
+
+    component if_else = IfThenElse();
+    if_else.cond <== skip_checks;
+    if_else.L <== 1;
+    if_else.R <== lt.out;
+    if_else.out === 1;
 }
 
 /*
@@ -304,7 +314,49 @@ template MSNZB(b) {
     signal input skip_checks;
     signal output one_hot[b];
 
-    // TODO
+    // Check non-zeroness of in
+    component is_zero = IsZero();
+    is_zero.in <== in;
+
+    component if_else = IfThenElse();
+    if_else.cond <== skip_checks;
+    if_else.L <== 1;
+    if_else.R <== 1 - is_zero.out;
+    if_else.out === 1;
+
+    // Convert in to bits (this also checks that length is correct)
+    component bits_converter = Num2Bits(b);
+    bits_converter.in <== in;
+    signal bits[b] <== bits_converter.bits;
+
+    component bit_is_one[b];
+    component is_not_found[b];
+    component condition[b];
+    component if_then_else[b];
+    for (var i = b - 1; i >= 0; i--) {
+        bit_is_one[i] = IsEqual();
+        bit_is_one[i].in[0] <== 1;
+        bit_is_one[i].in[1] <== bits[i];
+
+        // check sum by taking linear combination of all signals in one_hot so far
+        var sum = 0;
+        for (var j = b - 1; j > i; j--) {
+            sum += one_hot[j];
+        }
+        is_not_found[i] = IsZero();
+        is_not_found[i].in <== sum;
+
+        condition[i] = AND();
+        condition[i].a <== bit_is_one[i].out;
+        condition[i].b <== is_not_found[i].out;
+
+        if_then_else[i] = IfThenElse();
+        if_then_else[i].cond <== condition[i].out; // is 1 and not set
+        if_then_else[i].L <== 1;
+        if_then_else[i].R <== 0;
+
+        one_hot[i] <== if_then_else[i].out;
+    }
 }
 
 /*
