@@ -415,5 +415,86 @@ template FloatAdd(k, p) {
     signal output e_out;
     signal output m_out;
 
-    // TODO
+    component is_well_formed[2];
+    for (var i = 0; i < 2; i++) {
+        is_well_formed[i] = CheckWellFormedness(k, p);
+        is_well_formed[i].e <== e[i];
+        is_well_formed[i].m <== m[i];
+    }
+
+    signal mgn[2];
+    component left_shift_e[2];
+    for (var i = 0; i < 2; i++) {
+        // exponents are k-bit
+        left_shift_e[i] = LeftShift(k + p + 1);
+        left_shift_e[i].x <== e[i];
+        left_shift_e[i].shift <== p + 1;
+        left_shift_e[i].skip_checks <== 0;
+
+        mgn[i] <== left_shift_e[i].y + m[i];
+    }
+    // Check if  mgn[1] < mgn[0]
+    component less_than = LessThan(k + p + 1);
+    less_than.in[0] <== mgn[1];
+    less_than.in[1] <== mgn[0];
+
+    component e_switcher = Switcher();
+    e_switcher.sel <== less_than.out;
+    e_switcher.L <== e[1];
+    e_switcher.R <== e[0];
+
+    component m_switcher = Switcher();
+    m_switcher.sel <== less_than.out;
+    m_switcher.L <== m[1];
+    m_switcher.R <== m[0];
+
+    signal alpha_e <== e_switcher.outL;
+    signal beta_e <== e_switcher.outR;
+
+    signal alpha_m <== m_switcher.outL;
+    signal beta_m <== m_switcher.outR;
+
+    signal diff <== alpha_e - beta_e;
+
+    // else case
+    component shifted_alpha_m = LeftShift(k + p + 1);
+    shifted_alpha_m.x <== alpha_m;
+    shifted_alpha_m.shift <== diff;
+    shifted_alpha_m.skip_checks <== 1;
+
+    signal new_m <== shifted_alpha_m.y + beta_m;
+    signal new_e <== beta_e;
+
+    component normalize = Normalize(k, p, 2 * p + 1);
+    normalize.e <== new_e;
+    normalize.m <== new_m;
+    normalize.skip_checks <== 1;
+
+    component round_check = RoundAndCheck(k, p, 2 * p + 1);
+    round_check.e <== normalize.e_out;
+    round_check.m <== normalize.m_out;
+
+    component alpha_e_is_zero = IsZero();
+    alpha_e_is_zero.in <== alpha_e;
+
+    component diff_less_than = LessThan(k);
+    diff_less_than.in[0] <== p + 1;
+    diff_less_than.in[1] <== diff;
+
+    component or = OR();
+    or.a <== diff_less_than.out;
+    or.b <== alpha_e_is_zero.out;
+
+    component e_output_switcher = Switcher();
+    e_output_switcher.sel <== or.out;
+    e_output_switcher.L <== round_check.e_out;
+    e_output_switcher.R <== alpha_e;
+
+    component m_output_switcher = Switcher();
+    m_output_switcher.sel <== or.out;
+    m_output_switcher.L <== round_check.m_out;
+    m_output_switcher.R <== alpha_m;
+
+    e_out <== e_output_switcher.outL;
+    m_out <== m_output_switcher.outL;
 }
