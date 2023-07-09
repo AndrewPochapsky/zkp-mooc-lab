@@ -288,9 +288,6 @@ template LeftShift(shift_bound) {
     signal input skip_checks;
     signal output y;
 
-    // Not sure how to enforce this is correct...
-    y <-- x << shift;
-
     component lt = LessThan(shift_bound);
     lt.in[0] <== shift;
     lt.in[1] <== shift_bound;
@@ -300,6 +297,16 @@ template LeftShift(shift_bound) {
     if_else.L <== 1;
     if_else.R <== lt.out;
     if_else.out === 1;
+
+    component shift_bits = Num2Bits(shift_bound);
+    shift_bits.in <== shift;
+    signal partial_products[shift_bound + 1];
+    partial_products[0] <== 1;
+    for (var i = 0; i < shift_bound; i++) {
+        partial_products[i + 1] <== partial_products[i] * (1 + ((2**(2**i) - 1) * shift_bits.bits[i]));
+    }
+
+    y <== x * partial_products[shift_bound];
 }
 
 /*
@@ -374,7 +381,25 @@ template Normalize(k, p, P) {
     signal output m_out;
     assert(P > p);
 
-    // TODO
+    component msnzb = MSNZB(P + 1);
+    msnzb.in <== m;
+    msnzb.skip_checks <== skip_checks;
+
+    component one_hot_to_num = Bits2Num(P + 1);
+    one_hot_to_num.bits <== msnzb.one_hot;
+
+    var ell, l;
+    // Credit here to https://github.com/nullity00/circom-circuits/blob/main/circuits/float_add.circom
+    for (var i = 0; i < P + 1; i++) {
+        // Extracting the index via a linear combination.
+        ell += msnzb.one_hot[i] * i;
+        // Extracting the amount to shift by. Note that 1 << (P - i) == 2**(P-i)
+        l += msnzb.one_hot[i] * (1 << (P - i));
+    }
+
+    e_out <== e + ell - p;
+    // same as m << P - i
+    m_out <== m * l;
 }
 
 /*
